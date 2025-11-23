@@ -2,7 +2,7 @@ class Claudifier < Formula
   desc "Universal notification handler for Claude Code events"
   homepage "https://github.com/terraboops/claudifier"
   url "https://github.com/terraboops/claudifier/archive/v0.1.0.tar.gz"
-  sha256 "f456463037c16b50c919a996f9362714549231272281fcc58da56818d9491e7f"
+  sha256 "220c7f052278281ec1aa7619ec857c0d19dd079f106aedf66227e8198d80a5a3"
   license "Apache-2.0"
   head "https://github.com/terraboops/claudifier.git", branch: "main"
 
