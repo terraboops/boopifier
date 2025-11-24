@@ -65,13 +65,19 @@ pub use matcher::matches;
 ///
 /// Returns an error if event parsing fails. Handler execution outcomes are collected
 /// and returned as a list, allowing all handlers to run even if some fail.
+///
+/// Handlers are executed in parallel for better performance.
 pub async fn process_event(
     event_json: &str,
     config: &Config,
     registry: &HandlerRegistry,
 ) -> anyhow::Result<Vec<HandlerOutcome>> {
+    use futures::future::join_all;
+
     let event = Event::from_json(event_json)?;
-    let mut outcomes = Vec::new();
+
+    // Collect futures for all matching handlers
+    let mut handler_futures = Vec::new();
 
     for handler_config in &config.handlers {
         // Check if event matches the handler's rules
@@ -83,23 +89,31 @@ pub async fn process_event(
         let handler = match registry.get(&handler_config.handler_type) {
             Some(h) => h,
             None => {
-                outcomes.push(HandlerOutcome::Error(format!(
+                return Ok(vec![HandlerOutcome::Error(format!(
                     "{}: Unknown handler type: {}",
                     handler_config.name, handler_config.handler_type
-                )));
-                continue;
+                ))]);
             }
         };
 
-        // Execute the handler (collect outcomes)
-        match handler.handle(&event, &handler_config.config).await {
-            Ok(()) => outcomes.push(HandlerOutcome::Success),
-            Err(e) => outcomes.push(HandlerOutcome::Error(format!(
-                "{}: {}",
-                handler_config.name, e
-            ))),
-        }
+        // Clone data for this handler future
+        let event_clone = event.clone();
+        let config_clone = handler_config.config.clone();
+        let name = handler_config.name.clone();
+
+        // Create a future for this handler
+        let future = async move {
+            match handler.handle(&event_clone, &config_clone).await {
+                Ok(()) => HandlerOutcome::Success,
+                Err(e) => HandlerOutcome::Error(format!("{}: {}", name, e)),
+            }
+        };
+
+        handler_futures.push(future);
     }
+
+    // Execute all handler futures concurrently
+    let outcomes = join_all(handler_futures).await;
 
     Ok(outcomes)
 }

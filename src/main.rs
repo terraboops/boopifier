@@ -38,6 +38,22 @@ fn suppress_alsa_warnings() {
     }
 }
 
+// Suppress ALSA warnings as early as possible (before main)
+#[cfg(target_os = "linux")]
+#[used]
+#[link_section = ".init_array"]
+static ALSA_INIT: extern "C" fn() = {
+    extern "C" fn alsa_init() {
+        extern "C" {
+            fn snd_lib_error_set_handler(handler: Option<extern "C" fn()>);
+        }
+        unsafe {
+            snd_lib_error_set_handler(None);
+        }
+    }
+    alsa_init
+};
+
 struct DebugLogger {
     enabled: bool,
     log_path: PathBuf,

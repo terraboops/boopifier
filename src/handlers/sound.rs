@@ -57,7 +57,7 @@ impl Handler for SoundHandler {
         let file_path = get_sound_file(config)?;
 
         // Expand tilde in path
-        let expanded_path = shellexpand::tilde(&file_path);
+        let expanded_path = shellexpand::tilde(&file_path).to_string();
 
         // Get optional volume (0.0 to 1.0, default 1.0)
         let volume = config
@@ -65,8 +65,15 @@ impl Handler for SoundHandler {
             .and_then(|v| v.as_f64())
             .unwrap_or(1.0) as f32;
 
-        // Play the sound
-        play_sound(&expanded_path, volume)?;
+        // Play the sound in a blocking task to avoid blocking the async runtime
+        tokio::task::spawn_blocking(move || {
+            // Suppress ALSA warnings in this thread before initializing audio
+            suppress_alsa_errors_if_not_debug();
+            play_sound(&expanded_path, volume)
+        })
+            .await
+            .map_err(|e| NotificationError::Audio(format!("Sound playback task failed: {}", e)))?
+            .map_err(|e| NotificationError::Audio(format!("Sound playback failed: {}", e)))?;
 
         Ok(())
     }
@@ -127,9 +134,6 @@ fn get_sound_file(config: &HashMap<String, Value>) -> HandlerResult<String> {
 }
 
 fn play_sound(file_path: &str, volume: f32) -> HandlerResult<()> {
-    // Suppress verbose ALSA plugin warnings on Linux (unless debug mode is enabled)
-    suppress_alsa_errors_if_not_debug();
-
     // Get output stream and stream handle
     let (_stream, stream_handle) = OutputStream::try_default()
         .map_err(|e| NotificationError::Audio(format!("Failed to get audio output stream: {}", e)))?;
