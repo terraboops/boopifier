@@ -358,6 +358,29 @@ To troubleshoot, add `--debug` flag to the command:
 
 This logs to `/tmp/boopifier.log`.
 
+### Workspace Trust
+
+**Important:** Claude Code requires workspace trust to execute hooks. If your hooks aren't firing, check for this message in the debug logs:
+
+```
+Skipping [hook type] hook execution - workspace trust not accepted
+```
+
+**To resolve:**
+1. Start Claude Code from a project directory (not your home directory)
+2. Accept the workspace trust prompt when it appears
+3. Hooks will only execute in trusted workspaces
+
+**Why:** Hooks execute arbitrary commands, so Claude Code requires explicit trust per workspace for security. Your home directory (`~`) is typically not trusted by default.
+
+**Debugging:** Check `~/.claude/debug/latest` for hook execution messages:
+
+```bash
+grep -i "hook" ~/.claude/debug/latest
+```
+
+If you see "workspace trust not accepted", move to a project directory or create a dedicated workspace like `~/projects/my-work`.
+
 ## Common Use Cases
 
 ### Build Notifications
