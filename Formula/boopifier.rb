@@ -1,8 +1,8 @@
 class Boopifier < Formula
   desc "Universal notification handler for Claude Code events"
   homepage "https://github.com/terraboops/boopifier"
-  url "https://github.com/terraboops/boopifier/archive/v0.2.0.tar.gz"
-  sha256 "f7e0b237f35bac99daa0e66edc60c532ef8d455d83f611b8ddc215a0f2230089"
+  url "https://github.com/terraboops/boopifier/archive/v0.2.1.tar.gz"
+  sha256 "c67c23b543fe809822ab0928f5ef1a07366bfe44a2ee8d5a53a3c49fb62de718"
   license "Apache-2.0"
   head "https://github.com/terraboops/boopifier.git", branch: "main"
 
