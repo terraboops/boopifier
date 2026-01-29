@@ -6,9 +6,27 @@ use crate::error::NotificationError;
 use crate::event::Event;
 use crate::handlers::{Handler, HandlerResult};
 use async_trait::async_trait;
-use notify_rust::{Notification, Timeout, Urgency};
+use notify_rust::{Notification, Timeout};
 use serde_json::Value;
 use std::collections::HashMap;
+
+#[cfg(target_os = "linux")]
+use notify_rust::Urgency;
+
+/// Sets notification urgency (Linux/freedesktop only)
+#[cfg(target_os = "linux")]
+fn apply_urgency(notification: &mut Notification, urgency: &str) {
+    notification.urgency(match urgency {
+        "low" => Urgency::Low,
+        "critical" => Urgency::Critical,
+        _ => Urgency::Normal,
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_urgency(_notification: &mut Notification, _urgency: &str) {
+    // Urgency is not supported on macOS/Windows (freedesktop spec only)
+}
 
 /// Handler for desktop notifications.
 pub struct DesktopHandler;
@@ -34,12 +52,8 @@ impl Handler for DesktopHandler {
             .body(&body)
             .timeout(Timeout::Milliseconds(timeout_ms));
 
-        // Set urgency
-        notification.urgency(match urgency.as_str() {
-            "low" => Urgency::Low,
-            "critical" => Urgency::Critical,
-            _ => Urgency::Normal,
-        });
+        // Set urgency (Linux only)
+        apply_urgency(&mut notification, &urgency);
 
         notification
             .show()
