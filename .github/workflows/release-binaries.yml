@@ -38,28 +38,37 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev:arm64
-
-      - name: Install ALSA dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install ALSA dependencies (Linux x86_64 native)
+        if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
 
-      - name: Build release binary
+      - name: Install ARM64 strip tools (for cross-compilation)
+        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu
+
+      - name: Install cargo-binstall (for faster cross installation)
+        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+      - name: Install cross for ARM64 Linux
+        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
+        run: cargo binstall cross --no-confirm
+
+      - name: Build release binary (native)
+        if: matrix.platform.target != 'aarch64-unknown-linux-gnu'
         run: cargo build --release --target ${{ matrix.platform.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Strip binary (Linux)
-        if: runner.os == 'Linux'
+      - name: Build release binary (cross for ARM64)
+        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --target ${{ matrix.platform.target }}
+
+      - name: Strip binary (native x86_64 and macOS)
+        if: matrix.platform.target != 'aarch64-unknown-linux-gnu'
         run: strip target/${{ matrix.platform.target }}/release/boopifier
 
-      - name: Strip binary (macOS)
-        if: runner.os == 'macOS'
-        run: strip target/${{ matrix.platform.target }}/release/boopifier
+      - name: Strip binary (ARM64 Linux)
+        if: matrix.platform.target == 'aarch64-unknown-linux-gnu'
+        run: aarch64-linux-gnu-strip target/${{ matrix.platform.target }}/release/boopifier
 
       - name: Create tarball
         run: |
