@@ -2,9 +2,11 @@
 # https://github.com/cross-rs/cross
 
 [target.aarch64-unknown-linux-gnu]
-# Install ALSA development libraries for ARM64 Linux builds
-# Required by rodio for sound playback functionality
+# Install dependencies for ARM64 Linux builds
+# - libasound2-dev: Required by rodio for sound playback
+# - libssl-dev: Required by openssl-sys (used by reqwest for HTTP/webhooks and lettre for email)
+# - pkg-config: Required for finding libraries during build
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get install -y libasound2-dev:$CROSS_DEB_ARCH pkg-config"
+    "apt-get update && apt-get install -y libasound2-dev:$CROSS_DEB_ARCH libssl-dev:$CROSS_DEB_ARCH pkg-config"
 ]
