@@ -30,7 +30,7 @@ futures = "0.3"  # For join_all to run handlers in parallel
 
 # Notification handlers
 notify-rust = "4.11"                          # Desktop notifications
-rodio = { version = "0.19", default-features = false, features = ["wav", "mp3", "vorbis", "flac"] }  # Sound playback
+rodio = { version = "0.21", default-features = false, features = ["playback", "wav", "mp3", "vorbis", "flac", "symphonia-aiff"] }  # Sound playback
 reqwest = { version = "0.12", features = ["json"] }  # HTTP/Webhooks
 lettre = "0.11"                                # Email
 

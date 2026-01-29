@@ -7,12 +7,12 @@ use crate::event::Event;
 use crate::handlers::{Handler, HandlerResult};
 use async_trait::async_trait;
 use rand::seq::SliceRandom;
-use rodio::{Decoder, OutputStream, Sink};
+use rodio::{Decoder, Sink};
+use rodio::stream::OutputStreamBuilder;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
-use std::time::Duration;
 
 // Suppress ALSA warnings on Linux (unless debug mode is enabled)
 #[cfg(target_os = "linux")]
@@ -134,18 +134,18 @@ fn get_sound_file(config: &HashMap<String, Value>) -> HandlerResult<String> {
 }
 
 fn play_sound(file_path: &str, volume: f32) -> HandlerResult<()> {
-    // Get output stream and stream handle
-    let (_stream, stream_handle) = OutputStream::try_default()
+    // Get output stream handle (rodio 0.21 API)
+    let stream_handle = OutputStreamBuilder::open_default_stream()
         .map_err(|e| NotificationError::Audio(format!("Failed to get audio output stream: {}", e)))?;
 
-    // Create a sink for audio playback
-    let sink = Sink::try_new(&stream_handle)
-        .map_err(|e| NotificationError::Audio(format!("Failed to create audio sink: {}", e)))?;
+    // Create a sink for audio playback (rodio 0.21 API)
+    let sink = Sink::connect_new(&stream_handle.mixer());
 
     // Open the audio file
     let file = File::open(file_path)
         .map_err(|e| NotificationError::Audio(format!("Failed to open audio file '{}': {}", file_path, e)))?;
 
+    // Decode the audio file
     let source = Decoder::new(BufReader::new(file))
         .map_err(|e| NotificationError::Audio(format!("Failed to decode audio file: {}", e)))?;
 
@@ -153,14 +153,13 @@ fn play_sound(file_path: &str, volume: f32) -> HandlerResult<()> {
     sink.set_volume(volume.clamp(0.0, 1.0));
     sink.append(source);
 
-    // Wait for sound to finish with a timeout (max 5 seconds)
-    // This prevents hanging if there are audio device issues
-    let timeout = Duration::from_secs(5);
-    let start = std::time::Instant::now();
+    // Block until all audio finishes playing
+    // IMPORTANT: This keeps both the sink AND stream_handle alive during playback
+    // Without this, the stream would be dropped and audio would stop immediately
+    sink.sleep_until_end();
 
-    while !sink.empty() && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    // Keep stream_handle alive until playback completes
+    drop(stream_handle);
 
     Ok(())
 }
