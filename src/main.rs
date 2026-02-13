@@ -1,9 +1,9 @@
-//! Boopifier - Universal notification receiver for Claude Code events.
+//! Boopifier - Universal notification receiver for Claude Code and OpenCode events.
 //!
 //! Reads JSON events from stdin and dispatches them to configured handlers.
 
-use clap::Parser;
 use boopifier::{hook_from_event, process_event, Config, Event, HandlerOutcome, HandlerRegistry};
+use clap::Parser;
 use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead, Write};
@@ -13,7 +13,7 @@ use std::process;
 #[derive(Parser)]
 #[command(name = "boopifier")]
 #[command(author, version, about)]
-#[command(about = "Universal notification handler for Claude Code events")]
+#[command(about = "Universal notification handler for Claude Code and OpenCode events")]
 struct Cli {
     /// Path to the configuration file (overrides auto-detection)
     #[arg(short, long)]
@@ -123,22 +123,34 @@ async fn main() {
         Ok(cfg) => cfg,
         Err(e) => {
             logger.log(&format!("Failed to load config: {}", e));
-            output_hook_error(&format!("Failed to load config from {:?}: {}", config_path, e));
+            output_hook_error(&format!(
+                "Failed to load config from {:?}: {}",
+                config_path, e
+            ));
             process::exit(0); // Exit 0 for hook compatibility
         }
     };
 
-    // Apply project-specific overrides if using global config
-    if let Ok(project_dir) = std::env::var("CLAUDE_PROJECT_DIR") {
+    // Apply project-specific overrides if using global config.
+    // Checks CLAUDE_PROJECT_DIR (Claude Code) and OPENCODE_PROJECT_DIR (OpenCode).
+    let project_dir = std::env::var("CLAUDE_PROJECT_DIR")
+        .or_else(|_| std::env::var("OPENCODE_PROJECT_DIR"))
+        .ok();
+
+    if let Some(ref project_dir) = project_dir {
         // Only apply overrides if we're not using a project-specific config
-        let project_config_path = PathBuf::from(&project_dir).join(".claude/boopifier.json");
-        if !project_config_path.exists() {
+        let project_config_path = PathBuf::from(project_dir).join(".claude/boopifier.json");
+        let opencode_config_path = PathBuf::from(project_dir).join(".opencode/boopifier.json");
+        if !project_config_path.exists() && !opencode_config_path.exists() {
             logger.log(&format!("Checking overrides for project: {}", project_dir));
-            config.apply_overrides(&project_dir);
+            config.apply_overrides(project_dir);
         }
     }
 
-    logger.log(&format!("Loaded config with {} handlers", config.handlers.len()));
+    logger.log(&format!(
+        "Loaded config with {} handlers",
+        config.handlers.len()
+    ));
 
     // Create handler registry
     let registry = HandlerRegistry::new();
@@ -185,13 +197,25 @@ async fn main() {
             match process_event(&event_json, &config, &registry).await {
                 Ok(outcomes) => {
                     // Log handler outcomes
-                    let successes = outcomes.iter().filter(|o| matches!(o, HandlerOutcome::Success)).count();
-                    let errors = outcomes.iter().filter(|o| matches!(o, HandlerOutcome::Error(_))).count();
+                    let successes = outcomes
+                        .iter()
+                        .filter(|o| matches!(o, HandlerOutcome::Success))
+                        .count();
+                    let errors = outcomes
+                        .iter()
+                        .filter(|o| matches!(o, HandlerOutcome::Error(_)))
+                        .count();
 
                     if errors == 0 {
-                        logger.log(&format!("Event processed successfully ({} handlers)", successes));
+                        logger.log(&format!(
+                            "Event processed successfully ({} handlers)",
+                            successes
+                        ));
                     } else {
-                        logger.log(&format!("Event processed: {} succeeded, {} failed", successes, errors));
+                        logger.log(&format!(
+                            "Event processed: {} succeeded, {} failed",
+                            successes, errors
+                        ));
                         for outcome in &outcomes {
                             if let HandlerOutcome::Error(msg) = outcome {
                                 logger.log(&format!("Handler error: {}", msg));
@@ -224,25 +248,47 @@ async fn main() {
     process::exit(0);
 }
 
-/// Resolve the config file path using Claude Code conventions.
+/// Resolve the config file path using Claude Code and OpenCode conventions.
 ///
 /// Resolution order:
-/// 1. $CLAUDE_PROJECT_DIR/.claude/boopifier.json (if CLAUDE_PROJECT_DIR is set and file exists)
-/// 2. ~/.claude/boopifier.json (global fallback, may include path-based overrides)
+/// 1. `$CLAUDE_PROJECT_DIR/.claude/boopifier.json` (Claude Code project config)
+/// 2. `$OPENCODE_PROJECT_DIR/.opencode/boopifier.json` (OpenCode project config)
+/// 3. `$OPENCODE_PROJECT_DIR/.claude/boopifier.json` (shared config in OpenCode project)
+/// 4. `~/.config/opencode/boopifier.json` (OpenCode global config)
+/// 5. `~/.claude/boopifier.json` (Claude Code global config / shared fallback)
 ///
-/// Note: When using the global config, project-specific overrides will be applied
-/// based on glob pattern matching against $CLAUDE_PROJECT_DIR.
+/// Note: When using a global config, project-specific overrides will be applied
+/// based on glob pattern matching against `$CLAUDE_PROJECT_DIR` or `$OPENCODE_PROJECT_DIR`.
 fn resolve_config_path() -> PathBuf {
-    // Try project-specific config if CLAUDE_PROJECT_DIR is set
+    // 1. Claude Code project config
     if let Ok(project_dir) = std::env::var("CLAUDE_PROJECT_DIR") {
-        let project_config = PathBuf::from(project_dir).join(".claude/boopifier.json");
+        let project_config = PathBuf::from(&project_dir).join(".claude/boopifier.json");
         if project_config.exists() {
             return project_config;
         }
     }
 
-    // Fall back to global config
+    // 2-3. OpenCode project config
+    if let Ok(project_dir) = std::env::var("OPENCODE_PROJECT_DIR") {
+        let opencode_config = PathBuf::from(&project_dir).join(".opencode/boopifier.json");
+        if opencode_config.exists() {
+            return opencode_config;
+        }
+        let shared_config = PathBuf::from(&project_dir).join(".claude/boopifier.json");
+        if shared_config.exists() {
+            return shared_config;
+        }
+    }
+
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+
+    // 4. OpenCode global config
+    let opencode_global = PathBuf::from(&home).join(".config/opencode/boopifier.json");
+    if opencode_global.exists() {
+        return opencode_global;
+    }
+
+    // 5. Claude Code global config (shared fallback)
     PathBuf::from(home).join(".claude/boopifier.json")
 }
 

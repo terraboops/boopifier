@@ -1,15 +1,19 @@
-//! Hook type system for Claude Code hooks.
+//! Hook type system for Claude Code and OpenCode hooks.
 //!
 //! Each hook type (Stop, Notification, PreToolUse, etc.) has specific response requirements.
 //! This module provides a trait-based abstraction for handling different hook types.
+//!
+//! OpenCode events are automatically detected and mapped to internal hook types.
+//! See the [`opencode`] module for the mapping table.
 
-pub mod stop;
+pub mod compact;
 pub mod notification;
-pub mod tool_use;
+pub mod opencode;
 pub mod permission;
 pub mod prompt;
 pub mod session;
-pub mod compact;
+pub mod stop;
+pub mod tool_use;
 
 use crate::event::Event;
 use anyhow::{bail, Result};
@@ -42,7 +46,7 @@ pub enum PermissionDecision {
     Ask,
 }
 
-/// Trait for Claude Code hook types.
+/// Trait for hook types (Claude Code and OpenCode).
 ///
 /// Each hook type knows how to generate its own JSON response format.
 pub trait Hook: Send + Sync {
@@ -53,12 +57,32 @@ pub trait Hook: Send + Sync {
     fn generate_response(&self, outcomes: &[HandlerOutcome]) -> Value;
 }
 
-/// Create a Hook instance from an event by parsing the hook_event_name
+/// Create a Hook instance from an event.
+///
+/// Supports both Claude Code events (via `hook_event_name` field) and OpenCode events
+/// (via `type`, `event`, or `hook` fields with dotted notation like `tool.execute.before`).
+///
+/// OpenCode events are normalized: a `hook_event_name` field is injected into the event
+/// data so that existing matchers work without modification.
 pub fn hook_from_event(event: &Event) -> Result<Box<dyn Hook>> {
-    let hook_event_name = event
-        .get_str("hook_event_name")
-        .unwrap_or("unknown");
+    // Try Claude Code format first
+    let hook_event_name = if let Some(name) = event.get_str("hook_event_name") {
+        name.to_string()
+    } else if let Some(oc_event) = opencode::detect_opencode_event_type(&event.data) {
+        // Map OpenCode event to internal hook name
+        match opencode::map_opencode_event(&oc_event) {
+            Some(mapped) => mapped.to_string(),
+            None => bail!("Unrecognized OpenCode event: {}", oc_event),
+        }
+    } else {
+        bail!("No hook_event_name or recognized OpenCode event type found")
+    };
 
+    hook_from_name(&hook_event_name, event)
+}
+
+/// Create a Hook from a resolved hook name and event data.
+fn hook_from_name(hook_event_name: &str, event: &Event) -> Result<Box<dyn Hook>> {
     match hook_event_name {
         "Stop" | "SubagentStop" => Ok(Box::new(stop::StopHook::new(hook_event_name))),
         "Notification" => Ok(Box::new(notification::NotificationHook)),
@@ -69,6 +93,8 @@ pub fn hook_from_event(event: &Event) -> Result<Box<dyn Hook>> {
         "SessionStart" => Ok(Box::new(session::SessionStartHook)),
         "SessionEnd" => Ok(Box::new(session::SessionEndHook)),
         "PreCompact" => Ok(Box::new(compact::PreCompactHook)),
+        "FileEdited" => Ok(Box::new(opencode::FileEditedHook)),
+        "SessionError" => Ok(Box::new(opencode::SessionErrorHook)),
         _ => bail!("Unknown hook type: {}", hook_event_name),
     }
 }

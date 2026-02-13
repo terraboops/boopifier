@@ -1,12 +1,15 @@
-//! Boopifier - A universal notification receiver for Claude Code events.
+//! Boopifier - A universal notification receiver for Claude Code and OpenCode events.
 //!
-//! This library receives JSON events from Claude Code hooks via stdin and dispatches
-//! them to various notification handlers based on configuration.
+//! This library receives JSON events from Claude Code or OpenCode hooks via stdin
+//! and dispatches them to various notification handlers based on configuration.
+//!
+//! OpenCode events are automatically detected and normalized to the internal format,
+//! so existing match rules and handlers work transparently with both systems.
 //!
 //! # Architecture
 //!
-//! - **Event**: JSON events from Claude Code
-//! - **Config**: Configuration from `.claude/boopifier.json`
+//! - **Event**: JSON events from Claude Code or OpenCode (auto-normalized)
+//! - **Config**: Configuration from `.claude/boopifier.json` or `.opencode/boopifier.json`
 //! - **Matcher**: Pattern matching to filter events
 //! - **Handlers**: Pluggable notification targets (desktop, sound, signal, webhook, email)
 //!
@@ -81,7 +84,11 @@ pub async fn process_event(
 
     for handler_config in &config.handlers {
         // Check if event matches the handler's rules
-        if !matches(&event, &handler_config.match_rules, &handler_config.match_type) {
+        if !matches(
+            &event,
+            &handler_config.match_rules,
+            &handler_config.match_type,
+        ) {
             continue;
         }
 
