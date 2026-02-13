@@ -25,7 +25,9 @@ impl Handler for SignalHandler {
             .get("recipient")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                NotificationError::InvalidConfig("Signal handler requires 'recipient' configuration".to_string())
+                NotificationError::InvalidConfig(
+                    "Signal handler requires 'recipient' configuration".to_string(),
+                )
             })?;
 
         // Get message template or use default
@@ -71,7 +73,10 @@ async fn send_signal_message(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(NotificationError::Handler(format!("signal-cli failed: {}", stderr)));
+        return Err(NotificationError::Handler(format!(
+            "signal-cli failed: {}",
+            stderr
+        )));
     }
 
     Ok(())
@@ -127,6 +132,9 @@ mod tests {
 
         let result = handler.handle(&event, &config).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'recipient'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires 'recipient'"));
     }
 }

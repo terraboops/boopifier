@@ -42,12 +42,11 @@ impl Handler for WebhookHandler {
 
     async fn handle(&self, event: &Event, config: &HashMap<String, Value>) -> HandlerResult<()> {
         // Get webhook URL
-        let url = config
-            .get("url")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                NotificationError::InvalidConfig("Webhook handler requires 'url' configuration".to_string())
-            })?;
+        let url = config.get("url").and_then(|v| v.as_str()).ok_or_else(|| {
+            NotificationError::InvalidConfig(
+                "Webhook handler requires 'url' configuration".to_string(),
+            )
+        })?;
 
         // Get payload type (slack, discord, json, or custom)
         let payload_type = config
@@ -150,9 +149,11 @@ fn render_payload_template(value: &Value, event: &Event) -> Value {
             }
             Value::Object(new_map)
         }
-        Value::Array(arr) => {
-            Value::Array(arr.iter().map(|v| render_payload_template(v, event)).collect())
-        }
+        Value::Array(arr) => Value::Array(
+            arr.iter()
+                .map(|v| render_payload_template(v, event))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }

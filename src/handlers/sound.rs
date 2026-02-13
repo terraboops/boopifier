@@ -7,8 +7,8 @@ use crate::event::Event;
 use crate::handlers::{Handler, HandlerResult};
 use async_trait::async_trait;
 use rand::seq::SliceRandom;
-use rodio::{Decoder, Sink};
 use rodio::stream::OutputStreamBuilder;
+use rodio::{Decoder, Sink};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
@@ -60,10 +60,7 @@ impl Handler for SoundHandler {
         let expanded_path = shellexpand::tilde(&file_path).to_string();
 
         // Get optional volume (0.0 to 1.0, default 1.0)
-        let volume = config
-            .get("volume")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0) as f32;
+        let volume = config.get("volume").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
 
         // Play the sound in a blocking task to avoid blocking the async runtime
         tokio::task::spawn_blocking(move || {
@@ -71,9 +68,9 @@ impl Handler for SoundHandler {
             suppress_alsa_errors_if_not_debug();
             play_sound(&expanded_path, volume)
         })
-            .await
-            .map_err(|e| NotificationError::Audio(format!("Sound playback task failed: {}", e)))?
-            .map_err(|e| NotificationError::Audio(format!("Sound playback failed: {}", e)))?;
+        .await
+        .map_err(|e| NotificationError::Audio(format!("Sound playback task failed: {}", e)))?
+        .map_err(|e| NotificationError::Audio(format!("Sound playback failed: {}", e)))?;
 
         Ok(())
     }
@@ -100,13 +97,15 @@ fn get_sound_file(config: &HashMap<String, Value>) -> HandlerResult<String> {
                 .collect(),
             _ => {
                 return Err(NotificationError::InvalidConfig(
-                    "Sound handler 'files' must be an array of strings".to_string()
+                    "Sound handler 'files' must be an array of strings".to_string(),
                 ))
             }
         };
 
         if files.is_empty() {
-            return Err(NotificationError::InvalidConfig("Sound handler 'files' array is empty".to_string()));
+            return Err(NotificationError::InvalidConfig(
+                "Sound handler 'files' array is empty".to_string(),
+            ));
         }
 
         // Check if random selection is enabled
@@ -118,32 +117,33 @@ fn get_sound_file(config: &HashMap<String, Value>) -> HandlerResult<String> {
         if random {
             // Randomly select one file
             let mut rng = rand::thread_rng();
-            files
-                .choose(&mut rng)
-                .cloned()
-                .ok_or_else(|| NotificationError::Audio("Failed to randomly select sound file".to_string()))
+            files.choose(&mut rng).cloned().ok_or_else(|| {
+                NotificationError::Audio("Failed to randomly select sound file".to_string())
+            })
         } else {
             // Use first file if random not enabled
             Ok(files[0].clone())
         }
     } else {
         Err(NotificationError::InvalidConfig(
-            "Sound handler requires either 'file' or 'files' configuration".to_string()
+            "Sound handler requires either 'file' or 'files' configuration".to_string(),
         ))
     }
 }
 
 fn play_sound(file_path: &str, volume: f32) -> HandlerResult<()> {
     // Get output stream handle (rodio 0.21 API)
-    let stream_handle = OutputStreamBuilder::open_default_stream()
-        .map_err(|e| NotificationError::Audio(format!("Failed to get audio output stream: {}", e)))?;
+    let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| {
+        NotificationError::Audio(format!("Failed to get audio output stream: {}", e))
+    })?;
 
     // Create a sink for audio playback (rodio 0.21 API)
     let sink = Sink::connect_new(&stream_handle.mixer());
 
     // Open the audio file
-    let file = File::open(file_path)
-        .map_err(|e| NotificationError::Audio(format!("Failed to open audio file '{}': {}", file_path, e)))?;
+    let file = File::open(file_path).map_err(|e| {
+        NotificationError::Audio(format!("Failed to open audio file '{}': {}", file_path, e))
+    })?;
 
     // Decode the audio file
     let source = Decoder::new(BufReader::new(file))
@@ -192,7 +192,10 @@ mod tests {
     #[test]
     fn test_get_sound_file_single() {
         let mut config = HashMap::new();
-        config.insert("file".to_string(), Value::String("/path/to/sound.wav".to_string()));
+        config.insert(
+            "file".to_string(),
+            Value::String("/path/to/sound.wav".to_string()),
+        );
 
         let result = get_sound_file(&config).unwrap();
         assert_eq!(result, "/path/to/sound.wav");
