@@ -55,9 +55,9 @@ impl Handler for DesktopHandler {
         // Set urgency (Linux only)
         apply_urgency(&mut notification, &urgency);
 
-        notification
-            .show()
-            .map_err(|e| NotificationError::SendFailed(format!("Failed to send desktop notification: {}", e)))?;
+        notification.show().map_err(|e| {
+            NotificationError::SendFailed(format!("Failed to send desktop notification: {}", e))
+        })?;
 
         Ok(())
     }

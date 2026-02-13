@@ -37,21 +37,39 @@ pub fn matches(event: &Event, rules: &Option<MatchRules>, match_type: &MatchType
         Some(MatchRules::Simple(simple_rules)) => {
             // Check if this is actually a complex rule that was mis-deserialized
             // (happens because untagged enums try Simple first)
-            if simple_rules.contains_key("any") || simple_rules.contains_key("all") || simple_rules.contains_key("not") {
+            if simple_rules.contains_key("any")
+                || simple_rules.contains_key("all")
+                || simple_rules.contains_key("not")
+            {
                 // Extract complex rule components
-                let all = simple_rules.get("all")
+                let all = simple_rules
+                    .get("all")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_object().map(|o| {
-                        o.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-                    })).collect());
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| {
+                                v.as_object().map(|o| {
+                                    o.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                                })
+                            })
+                            .collect()
+                    });
 
-                let any = simple_rules.get("any")
+                let any = simple_rules
+                    .get("any")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_object().map(|o| {
-                        o.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-                    })).collect());
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| {
+                                v.as_object().map(|o| {
+                                    o.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                                })
+                            })
+                            .collect()
+                    });
 
-                let not = simple_rules.get("not")
+                let not = simple_rules
+                    .get("not")
                     .and_then(|v| v.as_object())
                     .map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
 
@@ -70,7 +88,9 @@ fn matches_simple(event: &Event, rules: &HashMap<String, Value>, match_type: &Ma
     for (key, expected_value) in rules {
         // Support nested keys with dot notation (e.g., "tool.name")
         let actual_value = if key.contains('.') {
-            event.get_nested_str(key).map(|s| Value::String(s.to_string()))
+            event
+                .get_nested_str(key)
+                .map(|s| Value::String(s.to_string()))
         } else {
             event.data.get(key).cloned()
         };
@@ -151,9 +171,9 @@ fn values_match(actual: &Value, expected: &Value, match_type: &MatchType) -> boo
         (Value::Array(a), Value::Array(e)) => e.iter().all(|ev| a.iter().any(|av| av == ev)),
 
         // Object: recursive matching
-        (Value::Object(a), Value::Object(e)) => {
-            e.iter().all(|(k, ev)| a.get(k).is_some_and(|av| values_match(av, ev, match_type)))
-        }
+        (Value::Object(a), Value::Object(e)) => e
+            .iter()
+            .all(|(k, ev)| a.get(k).is_some_and(|av| values_match(av, ev, match_type))),
 
         // Type mismatch
         _ => false,
@@ -171,7 +191,11 @@ mod tests {
 
         let mut rules = HashMap::new();
         rules.insert("event_type".to_string(), json!("success"));
-        assert!(matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Exact));
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -180,7 +204,11 @@ mod tests {
 
         let mut rules = HashMap::new();
         rules.insert("event_type".to_string(), json!("success"));
-        assert!(!matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Exact));
+        assert!(!matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -189,7 +217,11 @@ mod tests {
 
         let mut rules = HashMap::new();
         rules.insert("tool.name".to_string(), json!("bash"));
-        assert!(matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Exact));
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -271,7 +303,10 @@ mod test_complex_any_hook_events {
             not: None,
         };
 
-        assert!(matches(&event, &Some(rules), &MatchType::Exact), "Should match Notification in any rules");
+        assert!(
+            matches(&event, &Some(rules), &MatchType::Exact),
+            "Should match Notification in any rules"
+        );
     }
 }
 
@@ -287,12 +322,19 @@ mod test_misdeserialized_complex_rules {
         let event = Event::from_json(r#"{"hook_event_name": "Notification"}"#).unwrap();
 
         let mut simple_map = HashMap::new();
-        simple_map.insert("any".to_string(), json!([
-            {"hook_event_name": "Notification"},
-            {"hook_event_name": "Stop"}
-        ]));
+        simple_map.insert(
+            "any".to_string(),
+            json!([
+                {"hook_event_name": "Notification"},
+                {"hook_event_name": "Stop"}
+            ]),
+        );
 
-        assert!(matches(&event, &Some(MatchRules::Simple(simple_map)), &MatchType::Exact));
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(simple_map)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -300,12 +342,19 @@ mod test_misdeserialized_complex_rules {
         let event = Event::from_json(r#"{"hook_event_name": "PermissionRequest"}"#).unwrap();
 
         let mut simple_map = HashMap::new();
-        simple_map.insert("any".to_string(), json!([
-            {"hook_event_name": "Notification"},
-            {"hook_event_name": "Stop"}
-        ]));
+        simple_map.insert(
+            "any".to_string(),
+            json!([
+                {"hook_event_name": "Notification"},
+                {"hook_event_name": "Stop"}
+            ]),
+        );
 
-        assert!(!matches(&event, &Some(MatchRules::Simple(simple_map)), &MatchType::Exact));
+        assert!(!matches(
+            &event,
+            &Some(MatchRules::Simple(simple_map)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -316,7 +365,11 @@ mod test_misdeserialized_complex_rules {
         let mut simple_map = HashMap::new();
         simple_map.insert("hook_event_name".to_string(), json!("Notification"));
 
-        assert!(matches(&event, &Some(MatchRules::Simple(simple_map)), &MatchType::Exact));
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(simple_map)),
+            &MatchType::Exact
+        ));
     }
 
     #[test]
@@ -341,11 +394,19 @@ mod test_regex_matching {
 
     #[test]
     fn test_regex_simple_pattern() {
-        let event = Event::from_json(r#"{"message": "Claude needs your permission to use Write"}"#).unwrap();
+        let event = Event::from_json(r#"{"message": "Claude needs your permission to use Write"}"#)
+            .unwrap();
 
         let mut rules = HashMap::new();
-        rules.insert("message".to_string(), json!("Claude needs your permission.*"));
-        assert!(matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Regex));
+        rules.insert(
+            "message".to_string(),
+            json!("Claude needs your permission.*"),
+        );
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Regex
+        ));
     }
 
     #[test]
@@ -353,8 +414,15 @@ mod test_regex_matching {
         let event = Event::from_json(r#"{"message": "Something else"}"#).unwrap();
 
         let mut rules = HashMap::new();
-        rules.insert("message".to_string(), json!("Claude needs your permission.*"));
-        assert!(!matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Regex));
+        rules.insert(
+            "message".to_string(),
+            json!("Claude needs your permission.*"),
+        );
+        assert!(!matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Regex
+        ));
     }
 
     #[test]
@@ -382,6 +450,10 @@ mod test_regex_matching {
 
         let mut rules = HashMap::new();
         rules.insert("status".to_string(), json!("success"));
-        assert!(matches(&event, &Some(MatchRules::Simple(rules)), &MatchType::Exact));
+        assert!(matches(
+            &event,
+            &Some(MatchRules::Simple(rules)),
+            &MatchType::Exact
+        ));
     }
 }

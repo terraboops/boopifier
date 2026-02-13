@@ -17,10 +17,7 @@ pub struct PreToolUseHook {
 
 impl PreToolUseHook {
     pub fn from_event(event: &Event) -> Result<Self> {
-        let tool_name = event
-            .get_str("tool_name")
-            .unwrap_or("unknown")
-            .to_string();
+        let tool_name = event.get_str("tool_name").unwrap_or("unknown").to_string();
 
         Ok(Self { tool_name })
     }
@@ -94,8 +91,8 @@ mod tests {
 
     #[test]
     fn test_pre_tool_use_auto_approve() {
-        let event = Event::from_json(r#"{"hook_event_name": "PreToolUse", "tool_name": "Bash"}"#)
-            .unwrap();
+        let event =
+            Event::from_json(r#"{"hook_event_name": "PreToolUse", "tool_name": "Bash"}"#).unwrap();
         let hook = PreToolUseHook::from_event(&event).unwrap();
 
         assert_eq!(hook.hook_type(), "PreToolUse");
@@ -116,8 +113,8 @@ mod tests {
     fn test_pre_tool_use_interactive_deny() {
         use crate::hooks::{InteractiveResponse, PermissionDecision};
 
-        let event = Event::from_json(r#"{"hook_event_name": "PreToolUse", "tool_name": "Bash"}"#)
-            .unwrap();
+        let event =
+            Event::from_json(r#"{"hook_event_name": "PreToolUse", "tool_name": "Bash"}"#).unwrap();
         let hook = PreToolUseHook::from_event(&event).unwrap();
 
         let interactive = InteractiveResponse {

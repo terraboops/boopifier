@@ -23,20 +23,26 @@ impl Handler for EmailHandler {
 
     async fn handle(&self, event: &Event, config: &HashMap<String, Value>) -> HandlerResult<()> {
         // Required config
-        let to = config
-            .get("to")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| NotificationError::InvalidConfig("Email handler requires 'to' configuration".to_string()))?;
+        let to = config.get("to").and_then(|v| v.as_str()).ok_or_else(|| {
+            NotificationError::InvalidConfig(
+                "Email handler requires 'to' configuration".to_string(),
+            )
+        })?;
 
-        let from = config
-            .get("from")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| NotificationError::InvalidConfig("Email handler requires 'from' configuration".to_string()))?;
+        let from = config.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
+            NotificationError::InvalidConfig(
+                "Email handler requires 'from' configuration".to_string(),
+            )
+        })?;
 
         let smtp_server = config
             .get("smtp_server")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| NotificationError::InvalidConfig("Email handler requires 'smtp_server' configuration".to_string()))?;
+            .ok_or_else(|| {
+                NotificationError::InvalidConfig(
+                    "Email handler requires 'smtp_server' configuration".to_string(),
+                )
+            })?;
 
         let smtp_port = config
             .get("smtp_port")
@@ -45,11 +51,7 @@ impl Handler for EmailHandler {
             .unwrap_or(25);
 
         // Optional config
-        let subject = render_template(
-            config.get("subject"),
-            event,
-            "Claude Code Notification",
-        );
+        let subject = render_template(config.get("subject"), event, "Claude Code Notification");
         let body = render_template(
             config.get("body"),
             event,
@@ -62,7 +64,14 @@ impl Handler for EmailHandler {
 
         // Send email
         send_email(
-            from, to, &subject, &body, smtp_server, smtp_port, username, password,
+            from,
+            to,
+            &subject,
+            &body,
+            smtp_server,
+            smtp_port,
+            username,
+            password,
         )
         .await?;
 
@@ -82,24 +91,31 @@ async fn send_email(
 ) -> HandlerResult<()> {
     // Build the email
     let email = Message::builder()
-        .from(from.parse().map_err(|e| NotificationError::Email(format!("Invalid 'from' address: {}", e)))?)
-        .to(to.parse().map_err(|e| NotificationError::Email(format!("Invalid 'to' address: {}", e)))?)
+        .from(
+            from.parse()
+                .map_err(|e| NotificationError::Email(format!("Invalid 'from' address: {}", e)))?,
+        )
+        .to(to
+            .parse()
+            .map_err(|e| NotificationError::Email(format!("Invalid 'to' address: {}", e)))?)
         .subject(subject)
         .header(ContentType::TEXT_PLAIN)
         .body(body.to_string())
         .map_err(|e| NotificationError::Email(format!("Failed to build email: {}", e)))?;
 
     // Build SMTP transport - use builder_dangerous for local/test servers
-    let mut mailer = if smtp_port == 1025 || smtp_server == "localhost" || smtp_server == "127.0.0.1" {
-        // Local test server - no TLS
-        SmtpTransport::builder_dangerous(smtp_server)
-            .port(smtp_port)
-    } else {
-        // Production server - use relay with TLS
-        SmtpTransport::relay(smtp_server)
-            .map_err(|e| NotificationError::Email(format!("Failed to connect to SMTP server: {}", e)))?
-            .port(smtp_port)
-    };
+    let mut mailer =
+        if smtp_port == 1025 || smtp_server == "localhost" || smtp_server == "127.0.0.1" {
+            // Local test server - no TLS
+            SmtpTransport::builder_dangerous(smtp_server).port(smtp_port)
+        } else {
+            // Production server - use relay with TLS
+            SmtpTransport::relay(smtp_server)
+                .map_err(|e| {
+                    NotificationError::Email(format!("Failed to connect to SMTP server: {}", e))
+                })?
+                .port(smtp_port)
+        };
 
     // Add credentials if provided
     if let (Some(user), Some(pass)) = (username, password) {

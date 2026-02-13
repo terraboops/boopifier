@@ -1,15 +1,15 @@
 # Boopifier
 
-A universal notification handler for Claude Code events.
+A universal notification handler for Claude Code and OpenCode events.
 
-Boopifier reads JSON events from stdin (sent by Claude Code hooks) and dispatches them to various notification handlers. Play sounds when Claude responds, get desktop notifications for important events, send yourself Signal messages, and more. **Crucially, it supports project-specific notification configs in your global config file** - perfect for keeping work notification preferences out of work repos while still getting customized notifications for each project.
+Boopifier reads JSON events from stdin (sent by Claude Code or OpenCode hooks) and dispatches them to various notification handlers. Play sounds when Claude responds, get desktop notifications for important events, send yourself Signal messages, and more. **Crucially, it supports project-specific notification configs in your global config file** - perfect for keeping work notification preferences out of work repos while still getting customized notifications for each project.
 
 ## Features
 
 - **Project-Specific Overrides**: Define different notification handlers for different projects (by path pattern) in your global config - keep personal notification preferences out of work repos
-- **Cross-Platform Hook Support**: Full implementation of all Claude Code hook types (Stop, Notification, PermissionRequest, SessionStart/End, PreCompact, and more)
+- **Cross-Platform Hook Support**: Full implementation of all Claude Code hook types (Stop, Notification, PermissionRequest, SessionStart/End, PreCompact, and more) and OpenCode hook types (tool.execute.before/after, session.idle, file.edited, and more)
 - **Multiple Notification Targets**: Desktop, Sound, Signal, Webhook, Email
-- **Flexible Event Matching**: Route different Claude Code events to different handlers with regex support
+- **Flexible Event Matching**: Route different hook events to different handlers with regex support
 - **Secrets Management**: Environment variables and file-based secrets
 - **Async Handler Execution**: Fast, concurrent notification delivery
 - **Extensible Plugin System**: Easy to add new notification handlers
@@ -111,6 +111,85 @@ Example `.claude/boopifier.json`:
 
 Now boopifier will play a sound on Notification events and show a desktop notification when Claude stops responding!
 
+### Setup with OpenCode
+
+Boopifier natively supports [OpenCode](https://github.com/anomalyco/opencode) hooks. OpenCode events are automatically detected and normalized, so the same match rules and handlers work with both systems.
+
+**Step 1: Configure OpenCode hooks**
+
+Add boopifier as a shell hook in your `opencode.json`:
+
+```json
+{
+  "hooks": {
+    "session_completed": [
+      {
+        "command": ["boopifier"]
+      }
+    ],
+    "file_edited": [
+      {
+        "command": ["boopifier"]
+      }
+    ]
+  }
+}
+```
+
+For plugin-based hooks, you can pipe events to boopifier from an OpenCode plugin using `ctx.$`:
+
+```typescript
+export const BoopifierPlugin: Plugin = async ({ $, client }) => ({
+  event: async ({ event }) => {
+    await $`echo ${JSON.stringify(event)} | boopifier`;
+  },
+});
+```
+
+**Step 2: Configure boopifier handlers**
+
+Create a config file. When running under OpenCode, boopifier looks for config in this order:
+1. `$OPENCODE_PROJECT_DIR/.opencode/boopifier.json` (OpenCode project config)
+2. `$OPENCODE_PROJECT_DIR/.claude/boopifier.json` (shared project config)
+3. `~/.config/opencode/boopifier.json` (OpenCode global config)
+4. `~/.claude/boopifier.json` (shared global fallback)
+
+The config format is identical. OpenCode events are normalized with a `hook_event_name` field, so existing match rules work:
+
+```json
+{
+  "handlers": [
+    {
+      "name": "sound-on-session-idle",
+      "type": "sound",
+      "match_rules": {"hook_event_name": "Stop"},
+      "config": {
+        "file": "/path/to/done.mp3"
+      }
+    }
+  ]
+}
+```
+
+#### OpenCode Event Mapping
+
+OpenCode events are automatically mapped to internal hook names:
+
+| OpenCode Event            | `hook_event_name` | Description                      |
+|---------------------------|-------------------|----------------------------------|
+| `tool.execute.before`     | `PreToolUse`      | Before tool execution            |
+| `tool.execute.after`      | `PostToolUse`     | After tool execution             |
+| `session.idle`            | `Stop`            | Session idle / agent stopped     |
+| `session.created`         | `SessionStart`    | New session started              |
+| `session.deleted`         | `SessionEnd`      | Session deleted                  |
+| `session.completed`       | `Stop`            | Session completed                |
+| `session.compacted`       | `PreCompact`      | History was compacted            |
+| `session.compacting`      | `PreCompact`      | History is about to be compacted |
+| `file.edited`             | `FileEdited`      | A file was edited (OpenCode-only)|
+| `session.error`           | `SessionError`    | Session error (OpenCode-only)    |
+
+This means you can write a single boopifier config that works with both Claude Code and OpenCode.
+
 ### Project-Specific Overrides
 
 You can define project-specific handler configurations in your **global** config file using path patterns. This is useful for work projects where you don't want to commit personal notification settings to the repo.
@@ -151,7 +230,7 @@ Add an `overrides` array to `~/.claude/boopifier.json`:
 - Glob patterns are supported (`*`, `**`, etc.)
 - When a pattern matches, override handlers **replace** base handlers completely
 - If multiple patterns match, the **last match wins**
-- Project-specific `.claude/boopifier.json` files still take full precedence
+- Project-specific `.claude/boopifier.json` and `.opencode/boopifier.json` files still take full precedence
 
 ## Available Handlers
 
@@ -211,7 +290,7 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for comprehensive documentation.
 
 ## Event Matching
 
-Boopifier receives all fields from Claude Code hook events and makes them available for both matching rules and template substitution in handler configs. See the [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks) for details on what fields are available for each hook type.
+Boopifier receives all fields from hook events and makes them available for both matching rules and template substitution in handler configs. See the [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks) for details on what fields are available for each hook type. OpenCode events are normalized with a `hook_event_name` field (see [event mapping](#opencode-event-mapping)), so the same match rules work for both.
 
 Handlers can match on event fields. Use `null` to match all events.
 
@@ -282,11 +361,11 @@ See [CLAUDE.md](CLAUDE.md) for detailed development documentation.
 ## Architecture
 
 ```
-stdin → Event Parser → Config Loader → Event Matcher → Handler Registry → Notifications
+stdin -> Event Parser -> [OpenCode Normalizer] -> Config Loader -> Event Matcher -> Handler Registry -> Notifications
 ```
 
-- **Event**: Flexible JSON structure from Claude Code
-- **Config**: `.claude/boopifier.json` with handler definitions
+- **Event**: Flexible JSON structure from Claude Code or OpenCode (auto-normalized)
+- **Config**: `.claude/boopifier.json` or `.opencode/boopifier.json` with handler definitions
 - **Matcher**: Pattern matching to filter events
 - **Handlers**: Pluggable notification targets
 

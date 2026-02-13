@@ -137,9 +137,8 @@ impl Config {
     ///
     /// Returns an error if the JSON is invalid.
     pub fn from_json(json: &str) -> Result<Self> {
-        let config: Config = serde_json::from_str(json).map_err(|e| {
-            NotificationError::InvalidConfig(format!("Invalid JSON: {}", e))
-        })?;
+        let config: Config = serde_json::from_str(json)
+            .map_err(|e| NotificationError::InvalidConfig(format!("Invalid JSON: {}", e)))?;
 
         Ok(config)
     }
