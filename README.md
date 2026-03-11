@@ -1,13 +1,13 @@
 # Boopifier
 
-A universal notification handler for Claude Code events.
+A universal notification handler for Claude Code and Cursor events.
 
-Boopifier reads JSON events from stdin (sent by Claude Code hooks) and dispatches them to various notification handlers. Play sounds when Claude responds, get desktop notifications for important events, send yourself Signal messages, and more. **Crucially, it supports project-specific notification configs in your global config file** - perfect for keeping work notification preferences out of work repos while still getting customized notifications for each project.
+Boopifier reads JSON events from stdin (sent by Claude Code or Cursor hooks) and dispatches them to various notification handlers. Play sounds when Claude responds, get desktop notifications for important events, send yourself Signal messages, and more. **Crucially, it supports project-specific notification configs in your global config file** - perfect for keeping work notification preferences out of work repos while still getting customized notifications for each project.
 
 ## Features
 
 - **Project-Specific Overrides**: Define different notification handlers for different projects (by path pattern) in your global config - keep personal notification preferences out of work repos
-- **Cross-Platform Hook Support**: Full implementation of all Claude Code hook types (Stop, Notification, PermissionRequest, SessionStart/End, PreCompact, and more)
+- **Cross-Platform Hook Support**: Full implementation of all Claude Code hook types (Stop, Notification, PermissionRequest, SessionStart/End, PreCompact, and more), plus automatic Cursor event normalization
 - **Multiple Notification Targets**: Desktop, Sound, Signal, Webhook, Email
 - **Flexible Event Matching**: Route different Claude Code events to different handlers with regex support
 - **Secrets Management**: Environment variables and file-based secrets
@@ -73,6 +73,42 @@ See the [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks)
 ```
 
 This pipes hook events directly to boopifier.
+
+### Setup with Cursor
+
+Boopifier also works with [Cursor](https://cursor.com) hooks. Cursor events (camelCase names like `beforeShellExecution`, `stop`) are automatically normalized to the same internal format as Claude Code events, so your existing handler configs work for both.
+
+**Step 1: Configure Cursor hooks**
+
+Create `.cursor/hooks.json` in your project (or globally):
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [{ "command": "boopifier" }],
+    "postToolUse": [{ "command": "boopifier" }],
+    "beforeShellExecution": [{ "command": "boopifier" }],
+    "afterShellExecution": [{ "command": "boopifier" }],
+    "afterFileEdit": [{ "command": "boopifier" }],
+    "stop": [{ "command": "boopifier" }],
+    "sessionStart": [{ "command": "boopifier" }],
+    "sessionEnd": [{ "command": "boopifier" }]
+  }
+}
+```
+
+Cursor events are mapped to their Claude Code equivalents automatically:
+
+| Cursor Event | Mapped To |
+|---|---|
+| `preToolUse`, `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` | `PreToolUse` |
+| `postToolUse`, `afterShellExecution`, `afterMCPExecution`, `afterFileEdit` | `PostToolUse` |
+| `stop`, `afterAgentResponse` | `Stop` |
+| `sessionStart` / `sessionEnd` | `SessionStart` / `SessionEnd` |
+| `subagentStart` / `subagentStop` | `SubagentStart` / `SubagentStop` |
+
+Fields are also normalized: `conversation_id` → `session_id`, and `tool_name` is synthesized for Cursor-specific hooks (`beforeShellExecution` → `Bash`, `beforeReadFile` → `Read`, `afterFileEdit` → `Edit`).
 
 **Step 2: Configure boopifier handlers**
 
