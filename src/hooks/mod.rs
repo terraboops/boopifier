@@ -3,13 +3,14 @@
 //! Each hook type (Stop, Notification, PreToolUse, etc.) has specific response requirements.
 //! This module provides a trait-based abstraction for handling different hook types.
 
-pub mod stop;
+pub mod compact;
+pub mod cursor;
 pub mod notification;
-pub mod tool_use;
 pub mod permission;
 pub mod prompt;
 pub mod session;
-pub mod compact;
+pub mod stop;
+pub mod tool_use;
 
 use crate::event::Event;
 use anyhow::{bail, Result};
